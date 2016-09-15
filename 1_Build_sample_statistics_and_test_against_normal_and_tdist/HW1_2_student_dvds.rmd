@@ -1,0 +1,83 @@
+
+### Problem two
+  
+```{r, eval=TRUE, echo=TRUE}
+# load and have a quick look of the data
+library(LearnBayes)
+data(studentdata)
+str(studentdata)
+```
+
+```{r, fig.width=5, fig.height= 4}
+library(ggplot2)
+ggplot(aes(x=Dvds), data=studentdata) +
+  geom_histogram(binwidth =20)
+```
+
+```{r, eval=TRUE, echo=TRUE}
+# Summarize the data and report the 2.5th and 97.5th percentiles.
+summary(studentdata$Dvds)
+quantile(studentdata$Dvds, probs =c(0.025,0.5,0.975), na.rm = TRUE)
+```
+
+```{r, eval=TRUE, echo=TRUE}
+# Constuct a table of the individual values of DVDs that were observed.
+# And make a bar plot.
+table(studentdata$Dvds)
+
+barplot(table(studentdata$Dvds), ylab = "Number of students who own corresponding number of DVDs", xlab="Number of DVDs")
+```
+
+
+People turn to round the number to 10s for 5s when they report it. 
+Very few people have a large number of DVDs.
+Why is DVD number of 2.5 even possible?
+
+===========================================================
+### Problem Three 
+
+Make a scatter plot of the student wake-up time vs. to-sleep time. Find and over plot a least-squares fit.
+
+```{r, fig.width=5, fig.height= 4}
+
+plot(studentdata$ToSleep,studentdata$WakeUp, xlab="To-sleep Time", ylab="Wake-up Time")
+fit = lm(studentdata$WakeUp~studentdata$ToSleep)
+abline(fit)
+summary(fit)
+
+# Predict the average wake-up time for a student who went to bed at midnight
+# based on the linear fit.
+wakeuptime <- fit
+
+```
+
+
+
+```{r, fig.width=5, fig.height= 4}
+
+# Let's exclude points with NA values in ToSleep column or WakeUp column.
+good <- complete.cases(studentdata$ToSleep, studentdata$WakeUp)
+goodstudentdata <- studentdata[good,]
+
+# After removing NA values, calculate the correlation. 
+cor(goodstudentdata$ToSleep, goodstudentdata$WakeUp)
+
+# Let's try to do the same thing with ggplot2, and show the 95% confident level.
+ggplot(aes(x= ToSleep, y=WakeUp), data=goodstudentdata)+
+  geom_point()+
+  geom_smooth(method = "lm")
+```
+
+
+```{r, eval=TRUE, echo=TRUE}
+# Make prediction for students who went to bed at midnight: ToSleep =0 
+# The code is not working correctly. ?
+# However we really just need the y axis intercept for the linear function. From the summary, we can see the estimated wake up time is 7.9628, with std = 0.0618.
+predict(fit, data.frame(ToSleep = c(0,1)))
+```
+
+
+
+
+
+
