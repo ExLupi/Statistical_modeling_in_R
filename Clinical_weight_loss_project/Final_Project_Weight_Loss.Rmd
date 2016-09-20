@@ -1,0 +1,201 @@
+### Statistical Modelling Course Project
+Emma Yu, Dec 2014
+
+#### Introduction
+
+The goal of this study is to (1) determine factors related to 12 month weight loss. (2) determine whether an intervention was effective in increasing weight loss.
+
+
+#### Exploritory Analysis
+First, let's briefly look at the weight loss data 
+```{r}
+wt = read.table('project-dataset2.txt', header=T)
+summary(wt)
+```
+
+To have a quick look at the relationship between different parameters, we plot every parameter against each other. From the scatter plots, biomarker seems to linearly correlate with the age of the subject. The total numbers of samples are very small in race 2 and 4, and the race 3 seems to have a younger population than race 1. 
+
+```{r, echo = FALSE}
+plot(wt)
+```
+
+We summarize the data by race to check how many samples we have for each race group. As seen in the scatter plots, race 2 and 4 only contain 5 samples each, therefore it would be really hard to draw conclusion specifically to race 2 and 4. Race 1 has 43 samples, while race 3 contains 181. Judging from the quantiles, race 1 has systematically smaller weightloss compared to race 3. However, we should model the data in more detail, since the difference can be contributed by different age, treatment, or biomarker distributions in the race groups.
+
+```{r}
+table(wt$race)  
+by(wt$wtch, wt$race, summary)
+
+# Let's summary the weight loss by race.
+# Do a box plot or something?
+library(ggplot2)
+qplot(x=wtch, data = wt) +  
+  facet_wrap(~race, ncol =4) 
+```
+
+
+```{r}
+boxplot(wt$wtch~wt$race,ylab='weight change',xlab="race")
+# there are two outliers, maybe simply not representative?
+```
+
+#### Frequentist Analysis
+
+First, let's contruct a full model with all data points and all avaliable variables as covariants.
+
+```{r}
+fitall <- lm(wtch ~ as.factor(treatment) + age + as.factor(race) + biomarker, data =wt)
+summary(fitall)
+plot(fitall)
+
+# Let's define dummy variables to allow different slopes for different races
+wt$r1 <- 0
+wt$r2 <- 0
+wt$r3 <- 0
+wt$r1[wt$race ==1] <-1
+wt$r2[wt$race ==2] <-1
+wt$r3[wt$race ==3] <-1
+
+
+fit <- lm(wtch ~ age + r1 + r2 + r3 + r1*age + r2*age + r3*age + biomarker + as.factor(treatment), wt)
+summary(fit)
+plot(fit)
+```
+
+
+```{r}
+str(wt)
+wt$t1 <- 0
+wt$t2 <- 0
+wt$t1[wt$treatment ==2] <-1
+wt$t2[wt$treatment ==3] <-1
+fit <- lm(wtch ~ age + r1 + r2 + r3 + r1*age + r2*age + r3*age + t1 + t2 + biomarker, wt)
+summary(fit)
+plot(fit)
+# so the treatment seems to be more significant than race.
+```
+
+
+
+wt$agesq <- wt$age*wt$age
+wt$biosq <- wt$bio*wt$bio
+fitage <-  lm(wtch ~ age + agesq + biomarker + biosq + age*biomarker, data =wt)  # R-squared = 0.024, simply including age has a smaller p value. Or maybe we don't need to worry about r-squared, the example in the lecture note doesn't have super large r square anyway.
+# not even better
+summary(fitage)
+# R-squared even more smaller
+plot(fitage)
+```
+The R-squared is only 0.099, which means the model very poorly explains the variability in the data.
+
+We don't see any strucutre in the residual vs. fittet plot. We can see 10 points with very large leverage, they can potentially lead to a poor model fit.
+(Are the outliers? Do we need to remove them?)
+
+Let's try to find out what are those points with every large leverage (>0.15), and try to exclude them see if that makes a difference. 
+
+Include different slopes for the race?
+Do a anova test 
+
+#### Bayesian Approach
+What kind of diagnostic can I do?
+
+```{r}
+# construct dummy variables for the factor variable.
+N <-dim(wt)[1]
+wt$r1 <- 0
+wt$r2 <- 0
+wt$r3 <- 0
+wt$r1[wt$race ==1] <-1
+wt$r2[wt$race ==2] <-1
+wt$r3[wt$race ==3] <-1
+
+wt$t1 <- 0
+wt$t2 <- 0
+wt$t1[wt$treatment ==2] <-1
+wt$t2[wt$treatment ==3] <-1
+
+wtdata = list('wtch'=wt$wtch, 'dum11' = wt$r1, 'dum12' = wt$r2, 'dum13' = wt$r3, 'age'=wt$age, 'bio'=wt$biomarker, 'dum21' = wt$t1, 'dum22' = wt$t2, 'N'=N)
+
+library(rjags)
+jagsmodel <- jags.model('wt_model.txt',
+                        data = wtdata,  
+                        list(list('beta'=c(0,0,0,0,0,0,0,0)), list('beta'=c(1,1,1,1,1,1,1,1))),
+                        n.chains = 2)
+
+jagsfit <- jags.samples(jagsmodel, "beta", n.iter=10000) 
+summary(jagsfit$beta, quantile, prob=c(0.025, 0.5, 0.975))
+
+# onlye par 1 seems to be within 97.5% confident non-zero.
+# Let's write down the mean and the sig and see how likely the coefficient is non-zero
+```
+
+
+Let test the model by looking at predicted data:
+```{r}
+#Yrep = matrix((0, 200, 1000))
+#for(i in 1:200){
+#  for(j in 1:800){
+#    Yrep[i,j]=rnorm(1, mean = as.matrix(t(X[i,])) %*% beta[j,], sd = sqrt(1/tau[j]))
+#  }
+#}
+
+```
+Should I build a few different models and compare the DIC, LPML or something?
+Or combine the intervention 
+Check the mixing of two variables for the two chain.
+check it in a bit more detail, see if we need to thin it, define burn in or anything. At least mention if in the write up.
+
+Do CPO, talk about DIC a bit. 
+Draw samples from the predicted distribution, test the number of outliers and stuff (see HW5 for an example.)
+
+
+
+
+```{r}
+# the mixing looks terrible, let's thin the chain by 300?
+par(mfrow=c(2, 4))
+acf(jagsfit$beta[1, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+autocorr.plot(jagsfit$beta[1, ,1], lag.max=500, main='beta 1 of chain 1')
+autocorr.plot(jagsfit$beta[1, ,2], lag.max=500, main='beta 1 of chain 2')
+autocorr.plot(jagsfit$beta[2, ,1], lag.max=500, main='beta 2 of chain 1')
+autocorr.plot(jagsfit$beta[2, ,2], lag.max=500, main='beta 2 of chain 2')
+autocorr.plot(jagsfit$beta[3, ,1], lag.max=500, main='beta 3 of chain 1')
+autocorr.plot(jagsfit$beta[3, ,2], lag.max=500, main='beta 3 of chain 2')
+autocorr.plot(jagsfit$beta[4, ,1], lag.max=500, main='beta 4 of chain 1')
+autocorr.plot(jagsfit$beta[4, ,2], lag.max=500, main='beta 4 of chain 2')
+autocorr.plot(jagsfit$beta[5, ,1], lag.max=500, main='beta 5 of chain 1')
+autocorr.plot(jagsfit$beta[5, ,2], lag.max=500, main='beta 5 of chain 2')
+autocorr.plot(jagsfit$beta[6, ,1], lag.max=500, main='beta 6 of chain 1')
+autocorr.plot(jagsfit$beta[6, ,2], lag.max=500, main='beta 6 of chain 2')
+autocorr.plot(jagsfit$beta[7, ,1], lag.max=500, main='beta 7 of chain 1')
+autocorr.plot(jagsfit$beta[7, ,2], lag.max=500, main='beta 7 of chain 2')
+autocorr.plot(jagsfit$beta[8, ,1], lag.max=500, main='beta 8 of chain 1')
+autocorr.plot(jagsfit$beta[8, ,2], lag.max=500, main='beta 8 of chain 2')
+
+par(mfrow=c(2, 4))
+#par(mfrow=c(1, 1))
+plot(jagsfit$beta[1, ,1], type='l', col='red', ylab='', main=expression(beta[0])) 
+lines(jagsfit$beta[1, ,2], type='l', col='blue')
+plot(jagsfit$beta[2, ,1], type='l', col='red', ylab='', main=expression(beta[1])) 
+lines(jagsfit$beta[2, ,2], type='l', col='blue')
+plot(jagsfit$beta[3, ,1], type='l', col='red', ylab='', main=expression(beta[2])) 
+lines(jagsfit$beta[3, ,2], type='l', col='blue')
+plot(jagsfit$beta[4, ,1], type='l', col='red', ylab='', main=expression(beta[3])) 
+lines(jagsfit$beta[4, ,2], type='l', col='blue')
+
+plot(density(jagsfit$beta[1,,]), type='l', main='') 
+plot(density(jagsfit$beta[2,,]), type='l', main='')
+plot(density(jagsfit$beta[3,,]), type='l', main='') 
+plot(density(jagsfit$beta[4,,]), type='l', main='')
+plot(density(jagsfit$beta[5,,]), type='l', main='') 
+plot(density(jagsfit$beta[6,,]), type='l', main='')
+plot(density(jagsfit$beta[7,,]), type='l', main='')
+plot(density(jagsfit$beta[8,,]), type='l', main='')
+
+```
+
+Should I contruct several model and see which one is better?
+How can I tell which par is significant? Is there a p value equivalent?
+
+
+#### Questions:
+1) For treatment, do 2 and 3 mean the same thing?
+2) what exactly is the biomarker? We can still envaluate its correlation with age and see if we should include it even we don't know exactly what it is.'
