@@ -1,0 +1,214 @@
+### Statistical Modelling Course Project
+Emma Yu, Dec 2014
+
+#### Introduction
+
+The goal of this study is to (1) determine factors related to 12 month weight loss. (2) determine whether an intervention was effective in increasing weight loss.
+
+
+#### Exploritory Analysis
+To have a quick look at the relationships between different parameters, we first plot every parameter against each other. From the scatter plots, biomarker seems to linearly correlate with the age of the subject. The total numbers of samples are very small in race 2 and 4, and race 3 seems to have smaller weight loss and a younger population than race 1. 
+
+```{r, echo = FALSE, fig.height= 3, fig.width =5}
+wt = read.table('project-dataset2.txt', header=T)
+#summary(wt)
+plot(wt)
+```
+
+We then briefly look at the data by race. Race 2 and 4 only contain 5 samples each, therefore it would be really hard to draw conclusions specifically to race 2 and 4. Race 1 has 43 samples, while race 3 contains 181. Judging from the quantiles, race 1 has systematically smaller weightloss compared to race 3. We see two significant outliers, which might have great impact on the data due to their high leverage. We will talk about more them later in this report.
+
+```{r, echo= FALSE}
+#table(wt$race)  
+#by(wt$wtch, wt$race, summary)
+
+library(ggplot2)
+#qplot(x=wtch, data = wt) +  
+#  facet_wrap(~race, ncol =4) 
+```
+
+
+```{r, echo = FALSE, fig.height= 3, fig.width =5}
+boxplot(wt$wtch~wt$race,ylab='weight change',xlab="race")
+```
+
+
+
+#### Frequentist Analysis
+
+First, let's contruct a full model with all data points and all avaliable variables as covariants.
+
+```{r, fig.height= 5, fig.width =7}
+fit11 <- lm(wtch ~ as.factor(treatment) + age + as.factor(race) + biomarker, data =wt)
+summary(fit11)
+par(mfrow=c(2,2))
+plot(fit11)
+```
+
+The model does not fit the data very well. The R-squared value is 0.099 for this model, meaning only about 10 percent of the variability in the data is explained by the model. However, the model is still significant. With a p value of 0.001, we can safely reject the null hypothesis. 
+
+Considering the median of the weight loss is -9.89, the residuals are very large for this model, but we don't see any strucutre in the residual vs. fittet plot. 10 points show very large leverage, which can potentially lead to big influence on the model fit.
+
+Race 3 is the most significant covariant with a p value of 5.64e-5, and age is the second most important covariance with a p value of 0.113. 
+
+##### Adding Interaction Terms
+To see if including interaction terms between different variables will imporve the model fit, we construct a series of expanded models:
+
+Model | Specification 
+------|-------------------------------------------------------------------------------------
+1-1   | Full model with race and treatment as factor variables
+1-2   | Same as 1-1 but without the treatment as a covariant
+2-1   | Add dummy variables for race to include interaction terms between age and race
+2-2   | Same as 2-1 but without the treatment as a covariant
+3-1   | Include dummy variables for both race and treatment
+
+
+The BICs and R-squared of the full model and models with interaction terms are shown below. Models with interaction terms have larger BICs and smaller R-squared compared to the full model, which means they fit the data worse than the full model. So I decided not to include the interaction terms.
+
+ Model | Residual standard error          | BIC       | Adjusted R-squared | p-value 
+-------|----------------------------------|-----------|--------------------|--------
+1-1    | 7.614 on 226 degrees of freedom  | 1655.046  |0.07149             |0.001179
+1-2    | 7.615 on 228 degrees of freedom  | 1646.258  |0.07125             |0.0005375
+2-1    | 7.653 on 223 degrees of freedom  | 1670.671  |0.06197             |0.006436
+2-2    | 7.647 on 225 degrees of freedom  | 1661.51   |0.06333             |0.003522
+3-1    | 7.683 on 221 degrees of freedom  | 1681.295  |0.05464             |0.01661
+
+##### Reduced Models
+As seen in exploritory analysis, biomarker has the largest P value, and it seems to correlate with age. We did a simple linear regression model for biomarker ~ age, and found R squared to be 0.4651. This means age predicts the biomarker reasonably well, but the two are not exactly the same. However, since those two variables are not independent of each other, including biomarker will greatly inflate the variance. We decided to examine a few reduced models. 
+
+Model | Specification 
+------|-------------------------------------------------------------------------------------
+4-1   | Reduced model without biomarker as a covariant
+4-2   | Same as 4-1 but without the treatment as a covariant
+4-1c  | Same as 4-1 but without the two outliers 
+5-1   | Reduced model with only age and treatement as covariants
+5-2   | Reduced model with only age as the covariant
+
+We can see models without race doe not fit the data well (5-1 and 5-2, with larger BIC and much smaller R-squared compared to other models). On the other hand, excluding the two outliers can significantly improve our model fit (with BIC 27 smaller than the model including the outliers). So we pick model 4-1 c, the reduced model without biomarker as a covariant and without the two outliers for our analysis. 
+
+ Model | Residual standard error          | BIC       | Adjusted R-squared | p-value
+-------|----------------------------------|-----------|--------------------|--------
+4-1    | 7.602 on 227 degrees of freedom  | 1649.923  |0.07427             |0.0006072
+4-2    | 7.604 on 229 degrees of freedom  | 1641.19   |0.07377             |0.0002399
+4-1 c  | 7.391 on 225 degrees of freedom  | 1622.949  |0.1004              |3.949e-05
+5-1    | 7.868 on 230 degrees of freedom  | 1652.689  |0.008501            |0.1751
+5-2    | 7.848 on 232 degrees of freedom  | 1642.632  |0.01345             |0.04209
+
+Judging from the expectaion and standard error, we are 68 percent confident that the treatment increases weightloss (a smaller wtch value). Treatment 3 has slightly larger effect than Treatment 2, with a expect (1.722 - 1.348 = 0.374) increase in weightloss.
+```{r, echo=FALSE}
+n1 <- which(wt$wtch == min(wt[wt$race ==1,]$wtch))
+n2 <- which(wt$wtch == min(wt[wt$race ==2,]$wtch))
+cleanwt <- wt[c(-n1, -n2),]
+fit41c <- lm(wtch ~ age + as.factor(treatment) + as.factor(race) ,data = cleanwt)
+coef(summary(fit41c))
+par(mfrow=c(2,2))
+plot(fit41c)
+#BIC(fit41c)
+```
+
+
+#### Bayesian Approach
+We added dummy variables for the factor variable race and treatment, and constructed a series of models in JAGS. The general form of the model is:
+wtch ~ N(mu, tau)
+mu ~ BX
+
+Since we don't have any prior knowlege associate with the weightloss, we simply choose diffuse normal priors for all the betas in all of our models. We use a diffuse gamma prior for all the taus.
+
+The covariances and DIC for each model is shown in the table below. We are using penalized deviance from dic.samples as our measurement. 
+
+Model | Covariants               | DIC
+------|--------------------------|------
+1     | age + bio + race + treat |1616 
+2     | age + race + treat       |1614
+3     | age + race3 only + treat |1613 
+4     | age + treat              |1635
+5     | age + race               |1619
+6     | age                      |1636 
+
+
+In model 1, the 95% interval of all the covariance includes zero, therefore we can't constrain the importance of parameters with great confidence. In model 2, we are 95% confident that the age is a significant factor. Since we have very few samples in race 2 and 4, we decided to try only including race 3 as a covariance. As expected, excluding biomarker imporves the variance in the model parameters. In model 3, both age and race 3 are proved to be significant at 95% confident level. We tried models with no treatment, with no race as covariants, and the model only with age as the covariants. All of them have larger DIC then model 3, and they do not provide any further insight of the data. Therefore we chose model 3 for our inference. 
+
+We should note that in the frequentist approach, we included all the races in the model. However, in the Bayesian approach, we only include one dummy variable for race 3. Since we eliminated two variables that are closely dependent on existing variables (race 2, 3, and 4 are not independent of each other), the model significance is improved.
+
+After a few experiments, we decided to thin the data by 100 to improve the mixing. We run 2 chains with 100000 sample each, so we have 2000 samples after thinning. The thinning does not change the modeled coefficients very much. 
+
+The output parameters of model 3 are (in the order of 'Inter',  'race3',  'age', 'treat2', 'treat3'): 
+
+```{r, echo = FALSE, message =FALSE}
+# construct dummy variables for the factor variable.
+N <-dim(wt)[1]
+wt$r1 <- 0
+wt$r2 <- 0
+wt$r3 <- 0
+wt$r1[wt$race ==1] <-1
+wt$r2[wt$race ==2] <-1
+wt$r3[wt$race ==3] <-1
+
+wt$t1 <- 0
+wt$t2 <- 0
+wt$t1[wt$treatment ==2] <-1
+wt$t2[wt$treatment ==3] <-1
+
+library(rjags)
+# Model 3 - Without dum11, dum 13, and biomarker since race 3 is the most significant
+wtdata3 = list('wtch'=wt$wtch, 'dum13' = wt$r3,  'age'=wt$age, 'dum21' = wt$t1, 'dum22' = wt$t2, 'N'=N)
+
+jagsmodel3 <- jags.model('wt_model3.txt',
+                        data = wtdata3,  
+                        list(list('beta'=c(0,0,0,0,0)), list('beta'=c(1,1,1,1,1))),
+                        n.chains = 2)
+
+#dic.samples(jagsmodel3, c('beta', 'wtch'), n.iter=10000)
+jagsfit3 <- jags.samples(jagsmodel3, "beta", n.iter=100000, n.thin=100) 
+conf3 <- summary(jagsfit3$beta, quantile, prob=c(0.025, 0.16, 0.5, 0.84,  0.975))
+conf3
+```
+
+Judging from the coefficients, we are 68% confident that treatment 3 can increase weightloss (with am expected value of -1.69). Treatment 2 is likely to increase the weightloss, but we can't say it with 68% confidence. On the other hand, race 3 have significantly larger weighloss compared to other races, and the weighloss decreases as age increases. 10 years of increase in age leads to a decrease of 2.2 in weightloss.
+
+
+Samples for betas and the PDFs of betas are shown below. We can see the mixing is generally well, and we have tighter constrain on treat 2, and treat 3 compared to other variables.
+
+```{r, echo =FALSE, warning =FALSE}
+# the mixing looks terrible, let's thin the chain by 300?
+#par(mfrow=c(2, 4))
+#acf(jagsfit3$beta[1, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+#acf(jagsfit3$beta[1, ,2], lag.max=500, plot= TRUE, main='beta 1 of chain 2')
+#acf(jagsfit3$beta[2, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+#acf(jagsfit3$beta[2, ,2], lag.max=500, plot= TRUE, main='beta 1 of chain 2')
+#acf(jagsfit3$beta[3, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+#acf(jagsfit3$beta[3, ,2], lag.max=500, plot= TRUE, main='beta 1 of chain 2')
+#acf(jagsfit3$beta[4, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+#acf(jagsfit3$beta[4, ,2], lag.max=500, plot= TRUE, main='beta 1 of chain 2')
+#acf(jagsfit3$beta[5, ,1], lag.max=500, plot= TRUE, main='beta 1 of chain 1')
+#acf(jagsfit3$beta[5, ,2], lag.max=500, plot= TRUE, main='beta 1 of chain 2')
+
+par(mfrow=c(2, 3))
+#par(mfrow=c(1, 1))
+plot(jagsfit3$beta[1, ,1], type='l', col='red', ylab='', main=expression(beta[0])) 
+lines(jagsfit3$beta[1, ,2], type='l', col='blue')
+plot(jagsfit3$beta[2, ,1], type='l', col='red', ylab='', main=expression(beta[1])) 
+lines(jagsfit3$beta[2, ,2], type='l', col='blue')
+plot(jagsfit3$beta[3, ,1], type='l', col='red', ylab='', main=expression(beta[2])) 
+lines(jagsfit3$beta[3, ,2], type='l', col='blue')
+plot(jagsfit3$beta[4, ,1], type='l', col='red', ylab='', main=expression(beta[3])) 
+lines(jagsfit3$beta[4, ,2], type='l', col='blue')
+plot(jagsfit3$beta[5, ,1], type='l', col='red', ylab='', main=expression(beta[4])) 
+lines(jagsfit3$beta[5, ,2], type='l', col='blue')
+```
+
+```{r}
+par(mfrow=c(2, 3))
+plot(density(jagsfit3$beta[1,,]), type='l', main='') 
+plot(density(jagsfit3$beta[2,,]), type='l', main='')
+plot(density(jagsfit3$beta[3,,]), type='l', main='') 
+plot(density(jagsfit3$beta[4,,]), type='l', main='')
+plot(density(jagsfit3$beta[5,,]), type='l', main='') 
+#plot(density(jagsfit$beta[6,,]), type='l', main='')
+#plot(density(jagsfit$beta[7,,]), type='l', main='')
+#plot(density(jagsfit$beta[8,,]), type='l', main='')
+
+```
+
+
+
+
